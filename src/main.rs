@@ -1,15 +1,23 @@
+extern crate sdl2;
+
 fn main() {
-    let x: i8 = 1;
-    let y: i32 = 200;
-    println!("{}, {}", x, y);
+    let sdl = sdl2::init().unwrap();
+    let video_subsystem = sdl.video().unwrap();
+    let _window = video_subsystem
+        .window("Game", 900, 700)
+        .resizable()
+        .build()
+        .unwrap();
 
-    let arr: [i32; 4];
-    arr = [1, 2, 3, 4];
-
-    println!("{}", arr[0]);
-
-    let alive: bool = true;
-    let person: (i8, bool) = (16, alive);
-
-    println!("{}, {}", person.0, person.1);
+    let mut event_pump = sdl.event_pump().unwrap();
+    'main: loop {
+        for event in event_pump.poll_iter() {
+            match event {
+                sdl2::event::Event::Quit {..} => break 'main,
+                _ => {},
+            }
+        }
+    
+        // render window contents here
+    }
 }
