@@ -1,8 +1,8 @@
-use std::ffi::{CString, CStr};
 use sdl2::event::Event;
-use sdl2::video::{WindowBuilder, GLContext};
-use sdl2::EventPump;
-use gl::types::*;
+use std::ffi::CString;
+
+pub mod render_gl;
+
 
 fn main() {
     let sdl = sdl2::init().unwrap();
@@ -27,6 +27,64 @@ fn main() {
         gl::ClearColor(0.3, 0.3, 0.5, 1.0);
     }
 
+    let vert_shader = render_gl::Shader::from_vert_source(
+        &CString::new(include_str!("triangle.vert")).unwrap()
+    ).unwrap();
+    
+    let frag_shader = render_gl::Shader::from_frag_source(
+        &CString::new(include_str!("triangle.frag")).unwrap()
+    ).unwrap();
+
+    let shader_program = render_gl::Program::from_shaders(
+        &[vert_shader, frag_shader]
+    ).unwrap();
+    
+    shader_program.set_used();
+
+    let vertices: Vec<f32> = vec![
+        -0.5, -0.5, 0.0,
+        0.5, -0.5, 0.0,
+        0.0, 0.5, 0.0
+    ];
+    
+    let mut vbo: gl::types::GLuint = 0;
+    unsafe {
+        gl::GenBuffers(1, &mut vbo);
+    }
+    
+    unsafe {
+        gl::BindBuffer(gl::ARRAY_BUFFER, vbo);
+        gl::BufferData(
+            gl::ARRAY_BUFFER, // target
+            (vertices.len() * std::mem::size_of::<f32>()) as gl::types::GLsizeiptr, // size of data in bytes
+            vertices.as_ptr() as *const gl::types::GLvoid, // pointer to data
+            gl::STATIC_DRAW, // usage
+        );
+        gl::BindBuffer(gl::ARRAY_BUFFER, 0); // unbind the buffer
+    }
+
+    let mut vao: gl::types::GLuint = 0;
+    unsafe {
+        gl::GenVertexArrays(1, &mut vao);
+    }
+
+    unsafe {
+        gl::BindVertexArray(vao);
+        gl::BindBuffer(gl::ARRAY_BUFFER, vbo);
+        gl::EnableVertexAttribArray(0); // this is "layout (location = 0)" in vertex shader
+        gl::VertexAttribPointer(
+            0, // index of the generic vertex attribute ("layout (location = 0)")
+            3, // the number of components per generic vertex attribute
+            gl::FLOAT, // data type
+            gl::FALSE, // normalized (int-to-float conversion)
+            (3 * std::mem::size_of::<f32>()) as gl::types::GLint, // stride (byte offset between consecutive attributes)
+            std::ptr::null() // offset of the first component
+        );
+
+        gl::BindBuffer(gl::ARRAY_BUFFER, 0);
+        gl::BindVertexArray(0);
+    }
+
     'main: loop {
         for event in event_pump.poll_iter() {
             match event {
@@ -39,80 +97,16 @@ fn main() {
             gl::Clear(gl::COLOR_BUFFER_BIT);
         }
 
-        window.gl_swap_window();
-    }
-}
-
-struct Shader {
-    id: gl::types::GLuint,
-}
-
-impl Shader {
-    fn from_source(
-        source: &CStr,
-        kind: gl::types::GLenum
-    ) -> Result<Shader, String> {
-        let id = shader_from_source(source, kind)?;
-        Ok(Shader { id })
-    }
-
-    fn from_vert_source(source: &CStr) -> Result<Shader, String> {
-        Shader::from_source(source, gl::VERTEX_SHADER)
-    }
-
-    fn from_frag_source(source: &CStr) -> Result<Shader, String> {
-        Shader::from_source(source, gl::FRAGMENT_SHADER)
-    }
-}
-
-impl Drop for Shader {
-    fn drop(&mut self) {
+        shader_program.set_used();
         unsafe {
-            gl::DeleteShader(self.id);
-        }
-    }
-}
-
-fn shader_from_source(source: &CStr, kind: GLenum) -> Result<GLuint, String> {
-    let id: u32 = unsafe { gl::CreateShader(kind) };
-    unsafe {
-        gl::ShaderSource(id, 1, &source.as_ptr(), std::ptr::null());
-        gl::CompileShader(id);
-    }
-
-    let mut success: GLint = 1;
-    unsafe {
-        gl::GetShaderiv(id, gl::COMPILE_STATUS, &mut success);
-    }
-
-    if success == 0 {
-        let mut len: GLint = 0;
-        unsafe {
-            gl::GetShaderiv(id, gl::INFO_LOG_LENGTH, &mut len);
-        }
-
-        let error: CString = create_whitespace_cstring_with_len(len as usize);
-
-        unsafe {
-            gl::GetShaderInfoLog(
-                id,
-                len,
-                std::ptr::null_mut(),
-                error.as_ptr() as *mut GLchar
+            gl::BindVertexArray(vao);
+            gl::DrawArrays(
+                gl::TRIANGLES, // mode
+                0, // starting index in the enabled arrays
+                3 // number of indices to be rendered
             );
         }
 
-        return Err(error.to_string_lossy().into_owned());
+        window.gl_swap_window();
     }
-
-    Ok(id)
-}
-
-fn create_whitespace_cstring_with_len(len: usize) -> CString {
-    // allocate buffer of correct size
-    let mut buffer: Vec<u8> = Vec::with_capacity(len + 1);
-    // fill it with len spaces
-    buffer.extend([b' '].iter().cycle().take(len));
-    // convert buffer to CString
-    unsafe { CString::from_vec_unchecked(buffer) }
 }
