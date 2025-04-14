@@ -1,2 +1,1 @@
 # rust-test
-learning Rust.
